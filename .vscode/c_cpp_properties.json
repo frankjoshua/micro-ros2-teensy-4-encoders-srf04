@@ -118,7 +118,6 @@
                 "/home/josh/.platformio/packages/framework-arduinoteensy/libraries/ks0108",
                 "/home/josh/.platformio/packages/framework-arduinoteensy/libraries/ssd1351",
                 "/home/josh/.platformio/packages/framework-arduinoteensy/libraries/x10",
-                "/home/josh/.platformio/packages/tool-unity",
                 ""
             ],
             "browse": {
@@ -234,12 +233,11 @@
                     "/home/josh/.platformio/packages/framework-arduinoteensy/libraries/ks0108",
                     "/home/josh/.platformio/packages/framework-arduinoteensy/libraries/ssd1351",
                     "/home/josh/.platformio/packages/framework-arduinoteensy/libraries/x10",
-                    "/home/josh/.platformio/packages/tool-unity",
                     ""
                 ]
             },
             "defines": [
-                "PLATFORMIO=50204",
+                "PLATFORMIO=60104",
                 "__IMXRT1062__",
                 "ARDUINO_TEENSY40",
                 "USB_SERIAL",

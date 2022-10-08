@@ -28,18 +28,19 @@
 #define EncoderCSLeft 6
 #define EncoderCSRight 5
 #define PID_MAX 2048
-#define K_P 10.0   // P constant
-#define K_I 0.05 // I constant
-#define K_D 5.0  // D constant
+// 20 is better but stops too quickly
+#define K_P 2.0   // P constant
+#define K_I 0.0 // I constant
+#define K_D 0.0  // D constant
 
 #define SONAR_NUM 1     // Number of sensors.
 #define MAX_DISTANCE 40 // Maximum distance (in cm) to ping.
 
 //define your robot' specs here
-#define TICKS_PER_REVOLUTION 64000 // Number of encoder ticks for full rotation
+#define TICKS_PER_REVOLUTION 170 // Number of encoder ticks for full rotation
 #define MAX_RPM 330                // motor's maximum RPM
-#define WHEEL_DIAMETER 0.15        // wheel's diameter in meters
-#define LR_WHEELS_DISTANCE 0.35    // distance between left and right wheels
+#define WHEEL_DIAMETER 0.254        // wheel's diameter in meters
+#define LR_WHEELS_DISTANCE 0.5144    // distance between left and right wheels
 #define FR_WHEELS_DISTANCE 0.30    // distance between front and rear wheels. Ignore this if you're on 2WD/ACKERMANN
 
 rcl_publisher_t range_publisher;
@@ -174,9 +175,9 @@ void publishOdomTransform(){
     vel_twist_msg->angular.z = vel.angular_z;
     vel_twist_msg->linear.x = vel.linear_x;
     // Debuging
-    // vel_twist_msg->linear.z = rpm.right;
-    // vel_twist_msg->linear.y = rpm.left;
-    // vel_twist_msg->angular.y = pidLeft.compute(goalRPM.motor1, rpm.left);
+    vel_twist_msg->linear.z = rpm.right;
+    vel_twist_msg->linear.y = rpm.left;
+    vel_twist_msg->angular.y = goalRPM.motor1;//pidLeft.compute(goalRPM.motor1, rpm.left);
 
     RCSOFTCHECK(rcl_publish(&vel_publisher, vel_twist_msg, NULL));
   }
