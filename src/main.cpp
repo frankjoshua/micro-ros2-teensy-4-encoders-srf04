@@ -37,7 +37,7 @@
 #define MAX_DISTANCE 40 // Maximum distance (in cm) to ping.
 
 //define your robot' specs here
-#define TICKS_PER_REVOLUTION 170 // Number of encoder ticks for full rotation
+#define TICKS_PER_REVOLUTION 234 // Number of encoder ticks for full rotation
 #define MAX_RPM 330                // motor's maximum RPM
 #define WHEEL_DIAMETER 0.254        // wheel's diameter in meters
 #define LR_WHEELS_DISTANCE 0.5144    // distance between left and right wheels
@@ -177,7 +177,7 @@ void publishOdomTransform(){
     // Debuging
     vel_twist_msg->linear.z = rpm.right;
     vel_twist_msg->linear.y = rpm.left;
-    vel_twist_msg->angular.y = goalRPM.motor1;//pidLeft.compute(goalRPM.motor1, rpm.left);
+    vel_twist_msg->angular.y = pidLeft.compute(goalRPM.motor1, rpm.left);
 
     RCSOFTCHECK(rcl_publish(&vel_publisher, vel_twist_msg, NULL));
   }
