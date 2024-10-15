@@ -3,7 +3,8 @@
 
 long encoderLeftLast = 0;
 long encoderRightLast = 0;
-long lastReadTime = 0;
+long lastReadTimeLeft = 0;
+long lastReadTimeRight = 0;
 double radius = 0;
 long tpr = 0;
 
@@ -11,28 +12,40 @@ Encoder::Encoder(int leftPin, int rightPin, double wheelRadius, long ticksPerRev
 {
   radius = wheelRadius;
   tpr = ticksPerRevolution;
+
   encoderLeft = new Encoder_Buffer(leftPin);
   encoderRight = new Encoder_Buffer(rightPin);
-  // Setup Encoders
+
+  // Initialize encoders
   SPI.begin();
   encoderLeft->initEncoder();
   encoderRight->initEncoder();
 }
 
-Encoder::RPM Encoder::getRPM()
-{
-  Encoder::RPM rpm;
-  long encoderLeftReading = -encoderLeft->readEncoder() / 4; //Read Encoder
-  long encoderRightReading = encoderRight->readEncoder() / 4;
-  double deltaLeft = encoderLeftReading - encoderLeftLast;
-  double deltaRight = encoderRightReading - encoderRightLast;
+void Encoder::readEncoders(Encoder::EncoderData &encoderData) {
   long readTime = millis();
-  long deltaTime = readTime - lastReadTime;
-  lastReadTime = readTime;
-  encoderLeftLast = encoderLeftReading;
-  encoderRightLast = encoderRightReading;
+  // Encoders are in x4 mode
+  long encoderLeftReading = -encoderLeft->readEncoder();
+  encoderData.reading.left = encoderLeftReading;
+  if(encoderLeftReading != 0){
+    long deltaTime = readTime - lastReadTimeLeft;
+    if(deltaTime > 0){
+      long deltaLeft = encoderLeftReading - encoderLeftLast;
+      lastReadTimeLeft = readTime;
+      encoderLeftLast = encoderLeftReading;
+      encoderData.rpm.left = (static_cast<double>(deltaLeft) * 60000.0) / (tpr * static_cast<double>(deltaTime));
+    }
+  }
 
-  rpm.left = (deltaLeft / tpr / deltaTime) * 60000.0;
-  rpm.right = (deltaRight / tpr / deltaTime) * 60000.0;
-  return rpm;
+  long encoderRightReading = encoderRight->readEncoder();
+  encoderData.reading.right = encoderRightReading;
+  if(encoderRightReading != 0){
+    long deltaTime = readTime - lastReadTimeRight;
+    if(deltaTime > 0){
+      long deltaRight = encoderRightReading - encoderRightLast;
+      lastReadTimeRight = readTime;
+      encoderRightLast = encoderRightReading;
+      encoderData.rpm.right = (static_cast<double>(deltaRight) * 60000.0) / (tpr * static_cast<double>(deltaTime));
+    }
+  }
 }

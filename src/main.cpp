@@ -5,7 +5,6 @@
 #include "PID.h"
 #include "Motor.h"
 #include "Odometry.h"
-#include <NewPing.h>
 
 #include <micro_ros_arduino.h>
 
@@ -18,7 +17,6 @@
 #include <geometry_msgs/msg/transform_stamped.h>
 #include <tf2_msgs/msg/tf_message.h>
 #include <geometry_msgs/msg/twist.h>
-#include <sensor_msgs/msg/range.h>
 #include <std_msgs/msg/empty.h>
 #include <nav_msgs/msg/odometry.h>
 
@@ -33,34 +31,32 @@
 #define K_I 0.0 // I constant
 #define K_D 0.0  // D constant
 
-#define SONAR_NUM 1     // Number of sensors.
-#define MAX_DISTANCE 40 // Maximum distance (in cm) to ping.
+// ROBOMO's Robot
+// #define TICKS_PER_REVOLUTION 936 // Number of encoder ticks for full rotation (234 * 4) enoders are in x4 mode
+// #define MAX_RPM 330               // motor's maximum RPM 
+// #define WHEEL_DIAMETER 0.254        // wheel's diameter in meters
+// #define LR_WHEELS_DISTANCE 0.5144    // distance between left and right wheels
+// #define FR_WHEELS_DISTANCE 0.30    // distance between front and rear wheels. Ignore this if you're on 2WD/ACKERMANN
 
-//define your robot' specs here
-#define TICKS_PER_REVOLUTION 234 // Number of encoder ticks for full rotation
-#define MAX_RPM 330                // motor's maximum RPM
-#define WHEEL_DIAMETER 0.254        // wheel's diameter in meters
-#define LR_WHEELS_DISTANCE 0.5144    // distance between left and right wheels
-#define FR_WHEELS_DISTANCE 0.30    // distance between front and rear wheels. Ignore this if you're on 2WD/ACKERMANN
+// Josh's Robot
+#define TICKS_PER_REVOLUTION 130000 // Number of encoder ticks for full rotation
+#define MAX_RPM 80               // motor's maximum RPM 
+#define WHEEL_DIAMETER 0.15        // wheel's diameter in meters
+#define LR_WHEELS_DISTANCE 0.35    // distance between left and right wheels
+#define FR_WHEELS_DISTANCE 0.30 
 
-rcl_publisher_t range_publisher;
 rcl_publisher_t vel_publisher;
 rcl_subscription_t cmd_vel_subscriber;
 
 geometry_msgs__msg__Twist * vel_twist_msg;
 geometry_msgs__msg__Twist twist_msg;
-sensor_msgs__msg__Range * range;
 
 rclc_executor_t executor;
 rclc_support_t support;
 rcl_allocator_t allocator;
 rcl_node_t node;
-rcl_timer_t timer;
 
-NewPing sonar[SONAR_NUM] = {
-    // Sensor object array.
-    NewPing(4, 3, MAX_DISTANCE), // Each sensor's trigger pin, echo pin, and max distance to ping.
-};
+Encoder::EncoderData encoderData;
 
 Kinematics kinematics(Kinematics::DIFFERENTIAL_DRIVE, MAX_RPM, WHEEL_DIAMETER, FR_WHEELS_DISTANCE, LR_WHEELS_DISTANCE);
 PID pidLeft(-PID_MAX, PID_MAX, K_P, K_I, K_D);
@@ -106,7 +102,6 @@ void error_loop(int errorCode){
   }
 }
 
-//twist message cb
 void cmd_vel_callback(const void *msgin) {
   // error_loop(111111);
   const geometry_msgs__msg__Twist * msg = (const geometry_msgs__msg__Twist *)msgin;
@@ -129,12 +124,6 @@ void createROSNode(){
 void setupROS(){
 
   RCCHECK(rclc_publisher_init_default(
-    &range_publisher,
-    &node,
-    ROSIDL_GET_MSG_TYPE_SUPPORT(sensor_msgs, msg, Range),
-    "range"));
-
-  RCCHECK(rclc_publisher_init_default(
     &vel_publisher,
     &node,
     ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist),
@@ -149,7 +138,7 @@ void setupROS(){
 
   // create executor
   RCCHECK(rclc_executor_init(&executor, &support.context, 1, &allocator));
-  // RCCHECK(rclc_executor_add_timer(&executor, &timer));
+
   RCCHECK(rclc_executor_add_subscription(&executor, &cmd_vel_subscriber, &twist_msg, &cmd_vel_callback, ON_NEW_DATA));
 
   vel_twist_msg = geometry_msgs__msg__Twist__create();  
@@ -167,57 +156,41 @@ void publishOdomTransform(){
   {
     lastUpdateTime = millis();
 
-    Encoder::RPM rpm = encoder.getRPM();
-    leftMotor.adjust(pidLeft.compute(goalRPM.motor1, rpm.left));
-    rightMotor.adjust(pidRight.compute(goalRPM.motor2, rpm.right));
-    Kinematics::velocities vel = kinematics.getVelocities(rpm.left, rpm.right, 0, 0);
+    encoder.readEncoders(encoderData);
+    leftMotor.adjust(pidLeft.compute(goalRPM.motor1, encoderData.rpm.left));
+    rightMotor.adjust(pidRight.compute(goalRPM.motor2, encoderData.rpm.right));
+    Kinematics::velocities vel = kinematics.getVelocities(encoderData.rpm.left, encoderData.rpm.right, 0, 0);
 
     vel_twist_msg->angular.z = vel.angular_z;
     vel_twist_msg->linear.x = vel.linear_x;
-    // Debuging
-    vel_twist_msg->linear.z = rpm.right;
-    vel_twist_msg->linear.y = rpm.left;
-    vel_twist_msg->angular.y = pidLeft.compute(goalRPM.motor1, rpm.left);
+    // Debugging
+    vel_twist_msg->linear.z = encoderData.reading.left;
+    vel_twist_msg->linear.y = encoderData.reading.right;
+    vel_twist_msg->angular.y = pidLeft.compute(goalRPM.motor1, encoderData.rpm.left);
 
     RCSOFTCHECK(rcl_publish(&vel_publisher, vel_twist_msg, NULL));
   }
 
 }
 
-void publishRange(){
-  if (millis() - lastPingTime > 50)
-  {
-    lastPingTime = millis();
-    struct timespec tv = {0};
-    clock_gettime(0, &tv);
-    for (uint8_t i = 0; i < SONAR_NUM; i++)
-    {
-      // delay(30); // Wait 50ms between pings (about 20 pings/sec). 29ms should be the shortest delay between pings.
-      range->header.stamp.nanosec = tv.tv_nsec;
-      range->header.stamp.sec = tv.tv_sec;
-      range->min_range = 0.01;
-      range->max_range = MAX_DISTANCE / 100;
-      range->field_of_view = 0.261799;
-      float cm = sonar[i].ping_cm();
-      if (cm == 0)
-      {
-        range->range = INFINITY;
-      }
-      else
-      {
-        range->range = (float)cm / 100;
-      }
-      RCSOFTCHECK(rcl_publish(&range_publisher, range, NULL));
-    }
-  }
-}
-
 void setup() {
+  // while (true)
+  // {
+  //   delay(100);
+  //   encoder.readEncoders(encoderData);
+  //   Serial.print(millis());
+  //   Serial.print(" ");
+  //   Serial.print(encoderData.reading.right);
+  //   Serial.print(" ");
+  //   Serial.println(encoderData.reading.left);
+  // }
+  
+
   set_microros_transports();
   delay(2000);
-
   createROSNode();
   setupROS();
+  
 
   // goalRPM = kinematics.getRPM(0.2, 0, 0);
 }
@@ -227,7 +200,6 @@ void loop() {
   delay(1);
   stopIfNoCommand();
   publishOdomTransform();
-  // publishRange();
   
   RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10)));
 }
