@@ -6,7 +6,7 @@
 #include "Motor.h"
 #include "Odometry.h"
 
-#include <micro_ros_arduino.h>
+#include <micro_ros_platformio.h>
 
 #include <stdio.h>
 #include <rcl/rcl.h>
@@ -15,7 +15,7 @@
 #include <rclc/executor.h>
 
 #include <geometry_msgs/msg/transform_stamped.h>
-#include <tf2_msgs/msg/tf_message.h>
+// #include <tf2_msgs/msg/tf_message.h>
 #include <geometry_msgs/msg/twist.h>
 #include <std_msgs/msg/empty.h>
 #include <nav_msgs/msg/odometry.h>
@@ -196,8 +196,10 @@ void checkROSConnection() {
 
 void setup() {
 
-  set_microros_transports();
+  Serial.begin(115200);
+  set_microros_serial_transports(Serial);
   delay(2000);
+  
   createROSNode();
   setupROS();
   vel_twist_msg = geometry_msgs__msg__Twist__create();  

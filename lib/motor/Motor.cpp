@@ -5,7 +5,7 @@ Motor::Motor(int motorNumber, int dir)
 {
   direction = dir;
   motorCommand = "M" + String(motorNumber) + ": ";
-  Serial2.begin(9600);
+  Serial2.begin(115200);
 }
 
 void Motor::adjust(double delta)
