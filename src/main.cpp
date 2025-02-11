@@ -27,7 +27,7 @@
 #define EncoderCSRight 5
 #define PID_MAX 2048
 // 20 is better but stops too quickly
-#define K_P 2.0   // P constant
+#define K_P 0.009   // P constant
 #define K_I 0.0 // I constant
 #define K_D 0.0  // D constant
 
@@ -38,12 +38,19 @@
 // #define LR_WHEELS_DISTANCE 0.5144    // distance between left and right wheels
 // #define FR_WHEELS_DISTANCE 0.30    // distance between front and rear wheels. Ignore this if you're on 2WD/ACKERMANN
 
-// Josh's Robot
+// Josh's indoor Robot
 #define TICKS_PER_REVOLUTION 130000 // Number of encoder ticks for full rotation
 #define MAX_RPM 80               // motor's maximum RPM 
 #define WHEEL_DIAMETER 0.15        // wheel's diameter in meters
 #define LR_WHEELS_DISTANCE 0.35    // distance between left and right wheels
 #define FR_WHEELS_DISTANCE 0.30 
+
+// Josh's outdoor Robot
+// #define TICKS_PER_REVOLUTION 768 // 192 * 4 Number of encoder ticks for full rotation
+// #define MAX_RPM 122               // motor's maximum RPM 
+// #define WHEEL_DIAMETER 0.15        // wheel's diameter in meters
+// #define LR_WHEELS_DISTANCE 0.38    // distance between left and right wheels
+// #define FR_WHEELS_DISTANCE 0.38
 
 rcl_publisher_t vel_publisher;
 rcl_subscription_t cmd_vel_subscriber;
@@ -62,8 +69,8 @@ Kinematics kinematics(Kinematics::DIFFERENTIAL_DRIVE, MAX_RPM, WHEEL_DIAMETER, F
 PID pidLeft(-PID_MAX, PID_MAX, K_P, K_I, K_D);
 PID pidRight(-PID_MAX, PID_MAX, K_P, K_I, K_D);
 Encoder encoder(EncoderCSLeft, EncoderCSRight, WHEEL_DIAMETER / 2, TICKS_PER_REVOLUTION);
-Motor leftMotor(2);
-Motor rightMotor(1);
+Motor leftMotor(2, 0);
+Motor rightMotor(1, 1);
 
 char base_link[] = "/odom_wheel";
 char odom[] = "/odom";
@@ -103,7 +110,6 @@ void error_loop(int errorCode){
 }
 
 void cmd_vel_callback(const void *msgin) {
-  // error_loop(111111);
   const geometry_msgs__msg__Twist * msg = (const geometry_msgs__msg__Twist *)msgin;
   //callback function every time linear and angular speed is received from 'cmd_vel' topic
   //this callback function receives cmd_msg object where linear and angular speed are stored
@@ -140,8 +146,6 @@ void setupROS(){
   RCCHECK(rclc_executor_init(&executor, &support.context, 1, &allocator));
 
   RCCHECK(rclc_executor_add_subscription(&executor, &cmd_vel_subscriber, &twist_msg, &cmd_vel_callback, ON_NEW_DATA));
-
-  vel_twist_msg = geometry_msgs__msg__Twist__create();  
 }
 
 void stopIfNoCommand(){
@@ -152,13 +156,15 @@ void stopIfNoCommand(){
 }
 
 void publishOdomTransform(){
-  if (millis() - lastUpdateTime > 5)
+  if (millis() - lastUpdateTime > 50)
   {
     lastUpdateTime = millis();
 
     encoder.readEncoders(encoderData);
-    leftMotor.adjust(pidLeft.compute(goalRPM.motor1, encoderData.rpm.left));
-    rightMotor.adjust(pidRight.compute(goalRPM.motor2, encoderData.rpm.right));
+    double leftPower = pidLeft.compute(goalRPM.motor1, encoderData.rpm.left);
+    leftMotor.adjust(leftPower);
+    double rightPower = pidRight.compute(goalRPM.motor2, encoderData.rpm.right);
+    rightMotor.adjust(rightPower);
     Kinematics::velocities vel = kinematics.getVelocities(encoderData.rpm.left, encoderData.rpm.right, 0, 0);
 
     vel_twist_msg->angular.z = vel.angular_z;
@@ -166,40 +172,42 @@ void publishOdomTransform(){
     // Debugging
     vel_twist_msg->linear.z = encoderData.reading.left;
     vel_twist_msg->linear.y = encoderData.reading.right;
-    vel_twist_msg->angular.y = pidLeft.compute(goalRPM.motor1, encoderData.rpm.left);
+    vel_twist_msg->angular.y = leftPower;
+    vel_twist_msg->angular.x = encoderData.rpm.left;
 
     RCSOFTCHECK(rcl_publish(&vel_publisher, vel_twist_msg, NULL));
   }
 
 }
 
+void checkROSConnection() {
+  if (millis() - lastPingTime > 10000) {
+    // Try to ping the agent.
+    // Here we use a 200 ms timeout and 2 attempts.
+    rmw_ret_t ping_result = rmw_uros_ping_agent(200, 2);
+
+    if (ping_result != RMW_RET_OK) {
+      // If the ping fails, we assume the connection is lost.
+      error_loop(222);  // Use an error code indicating connection lost.
+    }
+    lastPingTime = millis();
+  }
+}
+
 void setup() {
-  // while (true)
-  // {
-  //   delay(100);
-  //   encoder.readEncoders(encoderData);
-  //   Serial.print(millis());
-  //   Serial.print(" ");
-  //   Serial.print(encoderData.reading.right);
-  //   Serial.print(" ");
-  //   Serial.println(encoderData.reading.left);
-  // }
-  
 
   set_microros_transports();
   delay(2000);
   createROSNode();
   setupROS();
-  
-
-  // goalRPM = kinematics.getRPM(0.2, 0, 0);
+  vel_twist_msg = geometry_msgs__msg__Twist__create();  
 }
 
 void loop() {
   
-  delay(1);
+  checkROSConnection();
   stopIfNoCommand();
   publishOdomTransform();
   
-  RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10)));
+  RCSOFTCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(2)));
 }

@@ -6,11 +6,12 @@
 class Motor
 {
 public:
-  Motor(int motorNumber);
+  Motor(int motorNumber, int dir);
   void adjust(double delta);
 
 private:
-  int power = 0;
+  double power = 0;
+  int direction = 1;
   String motorCommand;
 };
 
