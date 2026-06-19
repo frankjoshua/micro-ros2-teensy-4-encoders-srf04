@@ -161,10 +161,16 @@ void publishOdomTransform(){
     lastUpdateTime = millis();
 
     encoder.readEncoders(encoderData);
-    double leftPower = pidLeft.compute(goalRPM.motor1, encoderData.rpm.left);
-    leftMotor.adjust(leftPower);
-    double rightPower = pidRight.compute(goalRPM.motor2, encoderData.rpm.right);
-    rightMotor.adjust(rightPower);
+    // Compute PID outputs (RPM error domain)
+    double leftPID = pidLeft.compute(goalRPM.motor1, encoderData.rpm.left);
+    double rightPID = pidRight.compute(goalRPM.motor2, encoderData.rpm.right);
+
+    // Normalize to motor input domain [-1, 1]
+    double leftDelta = constrain(leftPID / PID_MAX, -1.0, 1.0);
+    double rightDelta = constrain(rightPID / PID_MAX, -1.0, 1.0);
+
+    leftMotor.adjust(leftDelta);
+    rightMotor.adjust(rightDelta);
     Kinematics::velocities vel = kinematics.getVelocities(encoderData.rpm.left, encoderData.rpm.right, 0, 0);
 
     vel_twist_msg->angular.z = vel.angular_z;
@@ -172,7 +178,8 @@ void publishOdomTransform(){
     // Debugging
     vel_twist_msg->linear.z = encoderData.reading.left;
     vel_twist_msg->linear.y = encoderData.reading.right;
-    vel_twist_msg->angular.y = leftPower;
+    // Publish raw left PID output for debugging
+    vel_twist_msg->angular.y = leftPID;
     vel_twist_msg->angular.x = encoderData.rpm.left;
 
     RCSOFTCHECK(rcl_publish(&vel_publisher, vel_twist_msg, NULL));

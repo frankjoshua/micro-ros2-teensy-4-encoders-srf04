@@ -10,17 +10,25 @@ Motor::Motor(int motorNumber, int dir)
 
 void Motor::adjust(double delta)
 {
-  power = power + delta;
-  // Adjust power based on motor direction
+  // Accumulate and clamp power in [-1, 1]
+  power = constrain(power + delta, -1.0, 1.0);
+
+  // Map to byte with float math, then clamp to the valid range per side
+  uint8_t outByte;
   if (direction > 0) {
-    // Right motor: 128 to 255
-    Serial2.write((int) map(power, -1, 1, 128, 255));
+    // Right motor: map [-1..1] -> [128..255]
+    float mapped = 128.0f + ((power + 1.0f) * 0.5f) * (255.0f - 128.0f);
+    if (mapped < 128.0f) mapped = 128.0f;
+    if (mapped > 255.0f) mapped = 255.0f;
+    outByte = static_cast<uint8_t>(mapped + 0.5f);
   } else {
-    // Left motor: 1 to 127
-    Serial2.write((int) map(power, -1, 1, 1, 127));
+    // Left motor: map [-1..1] -> [1..127]
+    float mapped = 1.0f + ((power + 1.0f) * 0.5f) * (127.0f - 1.0f);
+    if (mapped < 1.0f) mapped = 1.0f;
+    if (mapped > 127.0f) mapped = 127.0f;
+    outByte = static_cast<uint8_t>(mapped + 0.5f);
   }
-  // power = constrain(power + delta, -2048, 2048) * direction;
-  // Serial2.print(motorCommand);
-  // Serial.print(power);
-  
+
+  Serial2.write(outByte);
+
 }
